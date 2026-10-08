@@ -68,6 +68,23 @@ const MOBILE_ACTIONS = [
 	{ id: "review", icon: "↻", title: "复习", desc: "待复习内容", run: "review" },
 ];
 
+/**
+ * The guide, as a vault note rather than a help window.
+ *
+ * It lives in the vault so that the copy on the phone is the same file, synced by
+ * the same mechanism as everything else — and so that reading it, marking it up
+ * or adding to it needs no special screen.
+ */
+const GUIDE_NOTE = "README-使用说明.md";
+
+/**
+ * Below this many characters of ready material, the day's plan can only be a
+ * review of almost nothing — so Today says so, instead of quietly producing
+ * questions about a scrap of text. A page of real material is thousands of
+ * characters; this is a safety net, not a quality bar.
+ */
+const THIN_CORPUS_CHARS = 600;
+
 const DEFAULT_SETTINGS = {
 	// Left empty on purpose: the endpoint is deployment detail, not program code.
 	apiBase: "",
@@ -1205,8 +1222,27 @@ class AskModal extends Modal {
 			output.createDiv({ cls: "ds-subtle", text: "没有引用任何资料 —— 回答没有依据时不会编造来源。" });
 		}
 
+		// Three facts, not one: whether the user turned the switch on, whether the
+		// search ran, and whether anything came back. Deriving the heading from the
+		// result count alone made an enabled search that returned nothing read as
+		// "（未启用）", which is a different statement and a false one.
 		const web = data.web_sources || [];
-		output.createDiv({ cls: "ds-sources-title", text: "互联网来源" + (web.length ? "" : "（未启用）") });
+		const webOn = data.web_requested === true;
+		let webTitle = "互联网来源";
+		let webNote = "";
+		if (!webOn) {
+			webTitle += "（未启用）";
+			webNote = data.web_message || "本次没有联网。知识库是唯一来源。";
+		} else if (web.length) {
+			webTitle += "（已联网 · " + web.length + " 条）";
+		} else if (data.web_status === "unavailable") {
+			webTitle += "（已启用，服务器无法连接搜索服务）";
+			webNote = data.web_message || "服务器当前无法连接搜索服务。";
+		} else {
+			webTitle += "（已启用，本次没有结果）";
+			webNote = data.web_message || "已联网搜索，但这次没有拿到可用结果。";
+		}
+		output.createDiv({ cls: "ds-sources-title", text: webTitle });
 		if (web.length) {
 			web.forEach((source, index) => {
 				output.createDiv({ cls: "ds-source" }).createDiv({
@@ -1214,8 +1250,8 @@ class AskModal extends Modal {
 					text: "[W" + (index + 1) + "] " + (source.title || "") + " — " + (source.url || ""),
 				});
 			});
-		} else {
-			output.createDiv({ cls: "ds-subtle", text: "本次没有联网。知识库是唯一来源。" });
+		} else if (webNote) {
+			output.createDiv({ cls: "ds-subtle", text: webNote });
 		}
 
 		const dropped = (data.invalid_citations || []).length;
@@ -2065,7 +2101,21 @@ class DanielStudyView extends ItemView {
 	}
 
 	async onOpen() {
-		await this.render();
+		// Deliberately not `await this.render()`.
+		//
+		// `onOpen` runs inside Obsidian's budget for opening a view. render() paints
+		// the header, the navigation and the loading line *before* it touches the
+		// network, so starting it and returning already puts a real screen on the
+		// display — whereas awaiting it holds the view open across nine requests,
+		// and on a slow Tailscale round trip that exceeds the budget. Obsidian then
+		// kills the view with "Failed to load deferred view Error: Timeout" and the
+		// dashboard is dead before it has drawn anything, which is exactly what it
+		// did on a cold start.
+		this.render().catch((error) => {
+			// loadData turns a failed request into state, so reaching here means a
+			// drawing error — which should be visible rather than swallowed.
+			console.error("Daniel Study: 首页绘制失败", error);
+		});
 	}
 
 	async onClose() {
@@ -2258,6 +2308,9 @@ class DanielStudyView extends ItemView {
 			"ghost",
 		);
 		this.button(topActions, "刷新", () => this.reload(), "ghost");
+		// Reachable from both layouts, next to the two controls that are always on
+		// screen, so "how do I use this" has an answer inside the app itself.
+		this.button(topActions, "怎么用", () => this.plugin.openNote(GUIDE_NOTE), "ghost");
 
 		// ---- navigation: the five daily sections only ----------------------- //
 		const nav = inner.createDiv({ cls: this.isMobile ? "ds-nav ds-nav-mobile" : "ds-nav" });
@@ -2322,6 +2375,39 @@ class DanielStudyView extends ItemView {
 		} else if (this.section === "progress") {
 			this.renderProgress(inner, data);
 		}
+	}
+
+	/**
+	 * Say so when there is not enough material to plan from.
+	 *
+	 * The planner is honest — it can only build a day out of what has been imported —
+	 * but the page was not: with a single short document in the knowledge base it
+	 * produced five reviews and a quiz about that document and said nothing about
+	 * why. That reads as a broken product rather than an empty one, which is exactly
+	 * how it read. One line, in the user's words, with the action that fixes it.
+	 *
+	 * The threshold is about the *whole* base, not one file: a knowledge base needs
+	 * enough text for questions to be about something. Well under a page.
+	 */
+	renderThinCorpusHint(root, data) {
+		const ready = (data.materials || []).filter((m) => m.processing_status === "ready");
+		if (!ready.length) return;
+		const chars = ready.reduce((total, m) => total + (Number(m.char_count) || 0), 0);
+		if (chars >= THIN_CORPUS_CHARS) return;
+
+		const box = root.createDiv({ cls: "ds-hint" });
+		box.createDiv({
+			cls: "ds-hint-title",
+			text: "你的资料一共只有 " + chars.toLocaleString() + " 个字",
+		});
+		box.createDiv({
+			cls: "ds-hint-body",
+			text: "每天的计划只能从你导入的资料里出题，所以现在排出来的都是关于这一小段文字的题。"
+				+ "先导入一份真正要学的资料，今天的内容才会变成你要学的东西。",
+		});
+		const actions = box.createDiv({ cls: "ds-inline ds-hint-actions" });
+		this.button(actions, "添加资料", () => this.plugin.importMaterial(), "primary");
+		this.button(actions, "拍手写笔记", () => this.plugin.importHandwriting(true), "ghost");
 	}
 
 	renderToday(root, data) {
@@ -2401,6 +2487,8 @@ class DanielStudyView extends ItemView {
 		// On a phone, the six things worth starting lead the page: a thumb should
 		// not have to scroll past prose to reach 继续学习.
 		if (this.isMobile) this.renderMobileActions(root, active, tasks, goal);
+
+		this.renderThinCorpusHint(root, data);
 
 		// ---- how long today should be --------------------------------------- //
 		if (goal) this.renderMinutesPicker(root, goal);
@@ -2813,9 +2901,15 @@ class DanielStudyView extends ItemView {
 			const side = row.createDiv({ cls: "ds-row-side" });
 			this.button(side, "问这门课", () => this.plugin.ask("course", c.course), "ghost");
 		}
+		// Not a note about work not done: a list of where the things a person would
+		// look for here actually live. The product telling the user that a page
+		// "will be provided in a later phase" is the product apologising for itself,
+		// which is the last thing a page should say to somebody already unsure
+		// whether it is worth using.
 		root.createDiv({
-			cls: "ds-empty",
-			text: "课程详情页（考试倒计时、模块进度、本周学习）在下一阶段提供。",
+			cls: "ds-note",
+			text: "每门课的份数和字数就在上面。改资料的归属：到「资料」页点「分配课程」；"
+				+ "考试倒计时在「今天」；各目标进度在「进度」。",
 		});
 	}
 
