@@ -1544,3 +1544,47 @@ body.ds-focus .ds-session .modal-content {
 		min-height: 64px;
 	}
 }
+
+/* ------------------------------------------------------------------ hints -- */
+
+/**
+ * One line of plain truth above the day, used when the knowledge base is too thin
+ * for a plan to mean anything. Deliberately not a warning colour: nothing is
+ * broken — the user has simply not put anything in yet.
+ */
+.ds-hint {
+	background: var(--ds-accent-soft);
+	border: 1px solid var(--ds-line);
+	border-left: 3px solid var(--ds-accent);
+	border-radius: var(--ds-radius);
+	padding: 14px 16px;
+	margin: 0 0 16px;
+}
+
+.ds-hint-title {
+	font-size: 14px;
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+
+.ds-hint-body {
+	font-size: 13px;
+	color: var(--ds-ink-2);
+	line-height: 1.5;
+	margin-bottom: 12px;
+}
+
+.ds-hint-actions {
+	display: flex;
+	gap: 9px;
+	flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+	.ds-hint {
+		padding: 12px 13px;
+	}
+	.ds-hint-actions .ds-btn {
+		flex: 1 1 auto;
+	}
+}
