@@ -191,7 +191,7 @@ class DanielStudyPlugin extends Plugin {
 		});
 
 		// Clickable actions inside a material note come back through this
-		// protocol, so "Ask this material" works from a link — on desktop and on
+		// protocol, so a material's own action links work — on desktop and on
 		// mobile — without depending on which file happens to be focused.
 		this.registerObsidianProtocolHandler("daniel-study", (params) =>
 			this.guarded("Daniel Study 链接", () => this.onProtocol(params)),
@@ -1569,7 +1569,7 @@ class QuizModal extends Modal {
 			}
 		}
 		contentEl.createEl("p", {
-			text: "本次作答已永久保存。运行 “Sync server notes” 可刷新薄弱点与进度。",
+			text: "本次作答已永久保存。返回首页就能看到更新后的薄弱点与进度。",
 			cls: "setting-item-description",
 		});
 		contentEl
