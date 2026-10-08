@@ -146,42 +146,42 @@ class DanielStudyPlugin extends Plugin {
 		});
 		this.addSafeCommand({
 			id: "search-knowledge-base",
-			name: "Search knowledge base",
+			name: "搜索知识库",
 			callback: () => new SearchModal(this.app, this).open(),
 		});
 		this.addSafeCommand({
 			id: "generate-quiz",
-			name: "Generate quiz",
+			name: "让 AI 出题",
 			callback: () => this.generateQuiz(),
 		});
 		this.addSafeCommand({
 			id: "take-quiz",
-			name: "Take quiz",
+			name: "打开当前测验开始作答",
 			callback: () => this.takeQuiz(),
 		});
 		this.addSafeCommand({
 			id: "activate-assessment",
-			name: "Activate assessment (draft -> ready)",
+			name: "启用当前测验",
 			callback: () => this.activateAssessment(),
 		});
 		this.addSafeCommand({
 			id: "create-review-session",
-			name: "Create review session",
+			name: "生成复习清单",
 			callback: () => this.createReview(),
 		});
 		this.addSafeCommand({
 			id: "set-material-course",
-			name: "Set course for this material",
+			name: "给这份资料指定课程",
 			callback: () => this.setMaterialCourse(),
 		});
 		this.addSafeCommand({
 			id: "sync-server-notes",
-			name: "Sync server notes",
+			name: "从服务器同步卡片",
 			callback: () => this.syncServerNotes(),
 		});
 		this.addSafeCommand({
 			id: "open-dashboard",
-			name: "Open DANIEL STUDY dashboard",
+			name: "打开 DANIEL STUDY 首页",
 			callback: () => this.openNote("DANIEL STUDY.md"),
 		});
 		this.addSafeCommand({
@@ -578,6 +578,25 @@ class DanielStudyPlugin extends Plugin {
 			await this.generateQuiz(materialId, course);
 			return;
 		}
+		if (action === "take") {
+			const assessmentId = (params && params.assessment) || null;
+			if (!assessmentId) {
+				new Notice("链接里缺少测验 ID", 8000);
+				return;
+			}
+			const result = await this.api(`/assessments/${assessmentId}`);
+			if (!result.ok) {
+				new Notice(`读取失败：${result.error}`, 10000);
+				return;
+			}
+			const assessment = result.data;
+			if (!assessment.questions || !assessment.questions.length) {
+				new Notice("这张测验还没有题目", 8000);
+				return;
+			}
+			new QuizModal(this.app, this, assessment).open();
+			return;
+		}
 		if (action === "setcourse") {
 			if (!materialId) {
 				new Notice("链接里缺少材料 ID", 8000);
@@ -859,9 +878,23 @@ class DanielStudyPlugin extends Plugin {
 			return;
 		}
 		await this.writeNote(result.data.note_path, result.data.note_content, true);
-		await this.openNote(result.data.note_path);
+		// A draft becomes a live record the moment it is answered — the server
+		// promotes it — so there is no activation step to explain. Go straight
+		// into the questions: the user asked to practise, not to read a note.
+		// The note is still written, so the record exists and syncs.
 		const count = (result.data.questions || []).length;
-		new Notice(`已生成 ${count} 道题（草稿）。确认后运行 “Activate assessment” 启用。`, 12000);
+		const generated = result.data.assessment;
+		const assessmentId = generated && generated.id ? generated.id : null;
+		if (assessmentId && count) {
+			const full = await this.api(`/assessments/${assessmentId}`);
+			if (full.ok && full.data.questions && full.data.questions.length) {
+				new Notice(`已出 ${count} 道题，做完自动记账`, 5000);
+				new QuizModal(this.app, this, full.data).open();
+				return;
+			}
+		}
+		await this.openNote(result.data.note_path);
+		new Notice(`已生成 ${count} 道题`, 8000);
 	}
 
 	async activateAssessment() {
