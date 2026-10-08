@@ -111,7 +111,7 @@ class DanielStudyPlugin extends Plugin {
 
 		this.addSafeCommand({
 			id: "import-material",
-			name: "Import material (PDF / PPTX / DOCX / TXT / MD)",
+			name: "导入资料（PDF / PPTX / DOCX / TXT / MD）",
 			callback: () => this.importMaterial(),
 		});
 		// One AI surface, one name. The scope rides along with where you are
@@ -186,7 +186,7 @@ class DanielStudyPlugin extends Plugin {
 		});
 		this.addSafeCommand({
 			id: "test-connection",
-			name: "Test server connection",
+			name: "测试服务器连接",
 			callback: () => this.testConnection(),
 		});
 
