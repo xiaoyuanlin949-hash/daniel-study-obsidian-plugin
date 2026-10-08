@@ -1,7 +1,7 @@
 {
   "id": "daniel-study",
   "name": "Daniel Study",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.7.2",
   "description": "DANIEL STUDY — import materials, ask your knowledge base with citations, take quizzes, and sync server-side study records. AI answers never modify your notes.",
   "author": "Daniel",
